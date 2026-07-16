@@ -68,11 +68,11 @@ The action fails (exit 1) when an error-severity rule fires, or when warnings ex
 `max-warnings`. It exits 2 (also a failure) when it could not run: a missing,
 unparseable, or unsupported manifest.
 
-Findings are emitted as `::error`/`::warning`/`::notice` annotations. GitHub lists
-them on the workflow run and the pull request's **Checks** tab, and shows them inline
-on the **Files-changed** tab when the anchored line is part of the diff. Findings
-carry no line numbers, so annotations anchor to the top of the component's stories
-file, and GitHub caps them at ~10 per type per step.
+Findings are emitted as `::error`/`::warning`/`::notice` annotations, which GitHub
+shows on the workflow run and the pull request's **Checks** tab. They carry no line
+numbers, so each anchors to the top of the component's stories file, not the
+offending line — so they surface on the Checks tab, not beside your changed code in
+the diff. GitHub caps them at ~10 per type per step.
 
 ## See also
 
