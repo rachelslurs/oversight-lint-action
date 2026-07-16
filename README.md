@@ -1,4 +1,8 @@
-# oversight-lint-action
+<p align="center">
+  <img src="https://raw.githubusercontent.com/rachelslurs/storybook-oversight/main/assets/oversight-icon-128.png" alt="Oversight" width="96" height="96" />
+</p>
+
+<h1 align="center">oversight-lint-action</h1>
 
 Run [`oversight-lint`](https://www.npmjs.com/package/oversight-lint) in GitHub
 Actions to lint your Storybook MCP components manifest, and surface findings as
