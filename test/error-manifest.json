@@ -1,0 +1,17 @@
+{
+  "v": 0,
+  "meta": { "docgen": "react-docgen-typescript" },
+  "components": {
+    "ui-input": {
+      "id": "ui-input",
+      "name": "Input",
+      "path": "./src/Input.stories.tsx",
+      "description": "A text input.",
+      "reactDocgenTypescript": {
+        "description": "A text input.",
+        "props": { "value": { "required": true } }
+      },
+      "stories": []
+    }
+  }
+}

@@ -1,0 +1,36 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  clean:
+    name: Clean manifest passes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          manifest: test/clean-manifest.json
+
+  findings:
+    name: Error manifest fails
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: lint
+        continue-on-error: true
+        uses: ./
+        with:
+          manifest: test/error-manifest.json
+      - name: Assert the action failed on error findings
+        run: |
+          if [[ "${{ steps.lint.outcome }}" != "failure" ]]; then
+            echo "Expected the action to fail on error findings, got '${{ steps.lint.outcome }}'."
+            exit 1
+          fi
+          echo "OK: the action failed as expected on error findings."

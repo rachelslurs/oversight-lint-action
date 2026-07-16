@@ -1,0 +1,55 @@
+name: 'Oversight Lint'
+description: "Lint your Storybook MCP components manifest in CI, with inline PR annotations for missing or broken component docs."
+author: 'Rachel Cantor'
+
+branding:
+  icon: 'eye'
+  color: 'purple'
+
+inputs:
+  manifest:
+    description: 'Path to the built components.json (from `storybook build` with @storybook/addon-mcp).'
+    required: false
+    default: 'storybook-static/manifests/components.json'
+  max-warnings:
+    description: 'Fail if the number of warnings exceeds this. Omit for no limit.'
+    required: false
+    default: ''
+  config:
+    description: 'Path to an oversight.config.json (rules, expectedExtractor, ...).'
+    required: false
+    default: ''
+  expected-extractor:
+    description: 'Extractor the manifest should have used (default: react-docgen-typescript).'
+    required: false
+    default: ''
+  version:
+    description: 'oversight-lint version to run — an npm dist-tag or exact version.'
+    required: false
+    default: 'latest'
+  working-directory:
+    description: 'Directory to run in.'
+    required: false
+    default: '.'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Lint the components manifest
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      # Inputs are passed through env and read as shell variables, never
+      # interpolated into the script body, so a crafted input can't inject shell.
+      env:
+        INPUT_MANIFEST: ${{ inputs.manifest }}
+        INPUT_MAX_WARNINGS: ${{ inputs.max-warnings }}
+        INPUT_CONFIG: ${{ inputs.config }}
+        INPUT_EXPECTED_EXTRACTOR: ${{ inputs.expected-extractor }}
+        INPUT_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        args=("$INPUT_MANIFEST" --format github)
+        if [[ -n "$INPUT_MAX_WARNINGS" ]]; then args+=(--max-warnings "$INPUT_MAX_WARNINGS"); fi
+        if [[ -n "$INPUT_CONFIG" ]]; then args+=(--config "$INPUT_CONFIG"); fi
+        if [[ -n "$INPUT_EXPECTED_EXTRACTOR" ]]; then args+=(--expected-extractor "$INPUT_EXPECTED_EXTRACTOR"); fi
+        npx --yes "oversight-lint@$INPUT_VERSION" "${args[@]}"
