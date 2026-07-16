@@ -6,7 +6,7 @@
 
 Run [`oversight-lint`](https://www.npmjs.com/package/oversight-lint) in GitHub
 Actions to lint your Storybook MCP components manifest, and surface findings as
-inline annotations on the pull request.
+annotations on the pull request.
 
 Your coding agent reads your components from the manifest Storybook's MCP server
 generates. When a description never reaches that manifest, the agent sees a

@@ -1,5 +1,5 @@
 name: 'Oversight Lint'
-description: "Lint your Storybook MCP components manifest in CI, with inline PR annotations for missing or broken component docs."
+description: "Lint your Storybook MCP components manifest in CI, reporting missing or broken component docs as GitHub annotations."
 author: 'Rachel Cantor'
 
 branding:
