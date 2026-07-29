@@ -1,13 +1,13 @@
 {
   "v": 0,
-  "meta": null,
+  "meta": { "docgen": "react-docgen" },
   "components": {
     "ui-button": {
       "id": "ui-button",
       "name": "Button",
       "path": "./src/Button.stories.tsx",
       "description": "A button.",
-      "reactDocgenTypescript": {
+      "reactDocgen": {
         "description": "A button.",
         "props": { "label": { "description": "The visible text.", "required": true } }
       },
