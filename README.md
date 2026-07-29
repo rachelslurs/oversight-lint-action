@@ -40,6 +40,10 @@ jobs:
           max-warnings: 0
 ```
 
+If you set `expectedExtractor` on the Storybook addon, pass the same value here
+(or via `config` / `oversight.config.json`) so `extractor-drift` can run. Omit it
+to leave that rule off, matching the addon.
+
 ## Prerequisites
 
 - **A built manifest.** Run `storybook build` with
@@ -55,7 +59,7 @@ jobs:
 | `manifest`           | `storybook-static/manifests/components.json` | Path to the built `components.json`.                             |
 | `max-warnings`       | _(no limit)_                                 | Fail if warnings exceed this count.                              |
 | `config`             | _(none)_                                     | Path to an `oversight.config.json` (rules, `expectedExtractor`). |
-| `expected-extractor` | `react-docgen-typescript`                    | Extractor the manifest should have used.                        |
+| `expected-extractor` | _(none)_                                     | Enables `extractor-drift`; same meaning as the addon's `expectedExtractor`. |
 | `version`            | `latest`                                     | `oversight-lint` version to run (npm dist-tag or exact version). |
 | `working-directory`  | `.`                                          | Directory to run in.                                            |
 

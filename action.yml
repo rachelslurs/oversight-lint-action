@@ -20,7 +20,7 @@ inputs:
     required: false
     default: ''
   expected-extractor:
-    description: 'Extractor the manifest should have used (default: react-docgen-typescript).'
+    description: 'Extractor the manifest should have used. Enables extractor-drift; omit to leave that rule off (same as the Storybook addon).'
     required: false
     default: ''
   version:

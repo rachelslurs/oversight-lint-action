@@ -3,22 +3,55 @@ name: Test
 on:
   push:
   pull_request:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [oversight-lint-published]
+  schedule:
+    # Backup if a publish dispatch is missed; primary signal is repository_dispatch.
+    - cron: '0 14 * * 1'
 
 permissions:
   contents: read
 
+env:
+  # Publish events pin the exact release; push/PR/schedule exercise latest.
+  OVERSIGHT_LINT_VERSION: ${{ github.event.client_payload.version || 'latest' }}
+
 jobs:
+  resolve-version:
+    name: Wait for published package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure oversight-lint@$OVERSIGHT_LINT_VERSION is on npm
+        run: |
+          set -euo pipefail
+          version="$OVERSIGHT_LINT_VERSION"
+          echo "Resolving oversight-lint@$version"
+          for i in $(seq 1 30); do
+            if npm view "oversight-lint@$version" version; then
+              exit 0
+            fi
+            echo "Not visible yet (attempt $i/30); sleeping 10s"
+            sleep 10
+          done
+          echo "Timed out waiting for oversight-lint@$version on npm"
+          exit 1
+
   clean:
     name: Clean manifest passes
+    needs: resolve-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: ./
         with:
           manifest: test/clean-manifest.json
+          max-warnings: 0
+          version: ${{ env.OVERSIGHT_LINT_VERSION }}
 
   findings:
     name: Error manifest fails
+    needs: resolve-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,6 +60,7 @@ jobs:
         uses: ./
         with:
           manifest: test/error-manifest.json
+          version: ${{ env.OVERSIGHT_LINT_VERSION }}
       - name: Assert the action failed on error findings
         run: |
           if [[ "${{ steps.lint.outcome }}" != "failure" ]]; then
@@ -34,3 +68,78 @@ jobs:
             exit 1
           fi
           echo "OK: the action failed as expected on error findings."
+      - name: Assert required-prop-undocumented annotation title
+        env:
+          VERSION: ${{ env.OVERSIGHT_LINT_VERSION }}
+        run: |
+          set -euo pipefail
+          set +e
+          npx --yes "oversight-lint@$VERSION" test/error-manifest.json --format github >out.txt 2>&1
+          set -e
+          grep -F 'title=oversight/required-prop-undocumented' out.txt
+          echo "OK: found oversight/required-prop-undocumented"
+
+  no-extractor-expectation:
+    name: Drift ignored without expectation
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          manifest: test/drift-manifest.json
+          max-warnings: 0
+          version: ${{ env.OVERSIGHT_LINT_VERSION }}
+
+  extractor-drift-when-configured:
+    name: Configured extractor drift fails
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: lint
+        continue-on-error: true
+        uses: ./
+        with:
+          manifest: test/drift-manifest.json
+          expected-extractor: react-docgen-typescript
+          max-warnings: 0
+          version: ${{ env.OVERSIGHT_LINT_VERSION }}
+      - name: Assert the action failed on extractor drift
+        run: |
+          if [[ "${{ steps.lint.outcome }}" != "failure" ]]; then
+            echo "Expected extractor drift to exceed max-warnings, got '${{ steps.lint.outcome }}'."
+            exit 1
+          fi
+          echo "OK: configured extractor expectation detected drift."
+      - name: Assert extractor-drift annotation title
+        env:
+          VERSION: ${{ env.OVERSIGHT_LINT_VERSION }}
+        run: |
+          set -euo pipefail
+          set +e
+          npx --yes "oversight-lint@$VERSION" test/drift-manifest.json --format github \
+            --expected-extractor react-docgen-typescript --max-warnings 0 >out.txt 2>&1
+          set -e
+          grep -F 'title=oversight/extractor-drift' out.txt
+          echo "OK: found oversight/extractor-drift"
+
+  missing-manifest:
+    name: Missing manifest fails
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: lint
+        continue-on-error: true
+        uses: ./
+        with:
+          manifest: test/does-not-exist.json
+          version: ${{ env.OVERSIGHT_LINT_VERSION }}
+      - name: Assert the action failed on a missing manifest
+        run: |
+          if [[ "${{ steps.lint.outcome }}" != "failure" ]]; then
+            echo "Expected the action to fail on a missing manifest, got '${{ steps.lint.outcome }}'."
+            exit 1
+          fi
+          echo "OK: the action failed as expected on a missing manifest."
