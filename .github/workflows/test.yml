@@ -242,3 +242,133 @@ jobs:
           # This rule can only fire from props read out of a resolved payload.
           grep -F 'title=oversight/required-prop-undocumented' v1.out
           echo "OK: props were read through the refs."
+
+  # A publish dispatch is the only thing that proposes a bump. Push, pull request
+  # and cron runs gate a version but authorize nothing.
+  propose-bump:
+    name: Propose a pin bump
+    if: github.event_name == 'repository_dispatch'
+    needs:
+      - resolve-version
+      - clean
+      - findings
+      - no-extractor-expectation
+      - extractor-drift-when-configured
+      - missing-manifest
+      - v1-equivalence
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    # Queue rather than clobber a half-pushed branch.
+    concurrency:
+      group: propose-bump
+      cancel-in-progress: false
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.BUMP_APP_ID }}
+          private-key: ${{ secrets.BUMP_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+
+      - name: Rewrite the pin, then open or update the pull request
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          # Attacker-controllable by anyone who can dispatch, and it reaches a
+          # branch name and a file edit, so the regex below is a boundary.
+          NEW_VERSION: ${{ github.event.client_payload.version }}
+        run: |
+          set -euo pipefail
+          BRANCH=chore/pin-oversight-lint
+
+          pin_at() {
+            git show "$1:action.yml" 2>/dev/null \
+              | awk '/# oversight-lint-pin:/{f=1} f && /default:/{gsub(/.*default: .|.$/,""); print; exit}'
+          }
+
+          # Refuse and skip rather than fail. The monorepo dispatches on every
+          # publish with no stability check, so all three 0.6.0-beta.* releases
+          # fired this. A red job for an expected prerelease teaches you to
+          # ignore red.
+          if [[ ! "$NEW_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "$NEW_VERSION is not an exact stable version. Nothing to propose."
+            exit 0
+          fi
+
+          current=$(pin_at HEAD)
+          if [[ -z "$current" ]]; then
+            echo "No pin anchor in action.yml. It may have been reformatted."
+            exit 1
+          fi
+
+          if [[ "$NEW_VERSION" == "$current" ]]; then
+            echo "Already pinned to $NEW_VERSION."
+            exit 0
+          fi
+
+          # sort -V is only safe here because the regex above already rejected
+          # prereleases; it orders 1.0.0-beta after 1.0.0. Do not loosen one
+          # without the other.
+          older=$(printf '%s\n%s\n' "$NEW_VERSION" "$current" | sort -V | head -1)
+          if [[ "$older" == "$NEW_VERSION" ]]; then
+            echo "$NEW_VERSION is older than the pinned $current. Ignoring."
+            exit 0
+          fi
+
+          # A slower run for an older release must not force-push backwards over
+          # a newer one already proposed on the branch.
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            git fetch -q origin "$BRANCH"
+            proposed=$(pin_at "origin/$BRANCH" || true)
+            if [[ -n "$proposed" ]]; then
+              older=$(printf '%s\n%s\n' "$NEW_VERSION" "$proposed" | sort -V | head -1)
+              if [[ "$NEW_VERSION" != "$proposed" && "$older" == "$NEW_VERSION" ]]; then
+                echo "$BRANCH already proposes $proposed, which is newer. Ignoring."
+                exit 0
+              fi
+            fi
+          fi
+
+          echo "Proposing $current -> $NEW_VERSION"
+          awk -v v="$NEW_VERSION" '
+            /# oversight-lint-pin:/{f=1}
+            f && /default:/ && !done {sub(/default: .*/, "default: '\''" v "'\''"); done=1}
+            {print}
+          ' action.yml > action.yml.new && mv action.yml.new action.yml
+
+          if git diff --quiet action.yml; then
+            echo "Rewrite produced no change. The pin anchor has moved."
+            exit 1
+          fi
+
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git commit -qam "ci: pin oversight-lint $NEW_VERSION"
+          git push -q --force origin "$BRANCH"
+
+          # A CLI minor is where a new rule can newly fire, so it gets a human.
+          # A patch merges itself on green, because 15 releases in 18 days makes
+          # a review queue into a permanently stale pin.
+          kind=patch
+          if [[ "${NEW_VERSION%.*}" != "${current%.*}" ]]; then kind=minor; fi
+
+          if ! gh pr view "$BRANCH" --json number >/dev/null 2>&1; then
+            gh pr create --base main --head "$BRANCH" \
+              --title "ci: pin oversight-lint $NEW_VERSION" \
+              --body "Gated by this run against \`$NEW_VERSION\`. Previous pin was \`$current\`, so this is a $kind bump."
+          else
+            echo "Updated the open pull request."
+          fi
+
+          if [[ "$kind" == patch ]]; then
+            gh pr merge "$BRANCH" --auto --squash \
+              || echo "Could not enable auto-merge. Merge by hand; check Allow auto-merge and the required checks."
+          else
+            echo "Minor bump, leaving it for review."
+          fi
