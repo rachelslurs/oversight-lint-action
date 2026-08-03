@@ -1,0 +1,93 @@
+name: Release
+
+# Test already gates main: with no dispatch and no manual input,
+# resolve-version falls back to the pin in action.yml, so a push to main runs
+# the canary against exactly what the action ships. This waits for that rather
+# than gating a second time.
+on:
+  workflow_run:
+    workflows: [Test]
+    types: [completed]
+    branches: [main]
+
+# Tags need only contents: write, and the ruleset on main covers branches. This
+# deliberately runs on GITHUB_TOKEN rather than the PAT that propose-bump needs,
+# so a token expiring stops bumping without also stopping releasing.
+permissions:
+  contents: write
+
+concurrency: release-main
+
+jobs:
+  release:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Cut a version when the pin moved, and always move v1
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          # An annotated tag is a commit object, so it needs an identity. The
+          # lightweight v1 move does not, which is why this only surfaced once
+          # a version was actually being cut.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          pin_at() {
+            git show "$1:action.yml" 2>/dev/null \
+              | awk '/# oversight-lint-pin:/{f=1} f && /default:/{gsub(/.*default: .|.$/,""); print; exit}'
+          }
+
+          current=$(pin_at HEAD)
+          if [[ -z "$current" ]]; then
+            echo "No pin anchor at HEAD. action.yml may have been reformatted."
+            exit 1
+          fi
+
+          previous_tag=$(git tag -l 'v1.*.*' --sort=-v:refname | head -1)
+          previous=""
+          if [[ -n "$previous_tag" ]]; then
+            previous=$(pin_at "$previous_tag")
+          fi
+          echo "pin at HEAD: $current | at ${previous_tag:-none}: ${previous:-none}"
+
+          if [[ "$current" == "$previous" ]]; then
+            echo "Pin unchanged, so no new version. Moving v1 only."
+          else
+            major=${previous_tag#v}; major=${major%%.*}
+            rest=${previous_tag#v*.}
+            minor=${rest%%.*}
+            patch=${rest#*.}
+            : "${major:=1}" "${minor:=0}" "${patch:=0}"
+
+            # A CLI minor is where a new rule can newly fire, so it earns an
+            # action minor. Everything else is a patch.
+            if [[ -z "$previous" ]] || [[ "${current%.*}" != "${previous%.*}" ]]; then
+              minor=$((minor + 1)); patch=0
+            else
+              patch=$((patch + 1))
+            fi
+
+            next="v${major}.${minor}.${patch}"
+            echo "Cutting $next"
+            git tag -a "$next" -m "$next: pins oversight-lint $current"
+            git push origin "$next"
+            gh release create "$next" \
+              --title "$next" \
+              --notes "Runs \`oversight-lint@$current\`, gated by this repository's canary. Override with the \`version\` input."
+          fi
+
+          # v1 moves on every green push to main, including docs-only commits: a
+          # README at v1 that does not match the code is its own bug, and letting
+          # v1 lag is how it drifted two commits behind before.
+          git tag -f v1 "$HEAD_SHA"
+          git push --force origin v1
+          echo "v1 now at $HEAD_SHA"
