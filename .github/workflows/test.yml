@@ -265,7 +265,7 @@ jobs:
       group: propose-bump
       cancel-in-progress: false
     steps:
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v3
         id: app-token
         with:
           app-id: ${{ secrets.BUMP_APP_ID }}
