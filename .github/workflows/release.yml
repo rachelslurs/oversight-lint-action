@@ -35,6 +35,12 @@ jobs:
         run: |
           set -euo pipefail
 
+          # An annotated tag is a commit object, so it needs an identity. The
+          # lightweight v1 move does not, which is why this only surfaced once
+          # a version was actually being cut.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           pin_at() {
             git show "$1:action.yml" 2>/dev/null \
               | awk '/# oversight-lint-pin:/{f=1} f && /default:/{gsub(/.*default: .|.$/,""); print; exit}'
