@@ -24,9 +24,12 @@ inputs:
     required: false
     default: ''
   version:
-    description: 'oversight-lint version to run — an npm dist-tag or exact version.'
+    description: 'oversight-lint version to run — an npm dist-tag or exact version. Defaults to the version this action has tested.'
     required: false
-    default: 'latest'
+    # oversight-lint-pin: the tested version. The line below is rewritten by the
+    # propose-bump job in test.yml and read back by resolve-version, so both the
+    # writer and the reader depend on this anchor. Do not reformat.
+    default: '0.6.1'
   working-directory:
     description: 'Directory to run in.'
     required: false
