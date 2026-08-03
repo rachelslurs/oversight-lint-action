@@ -66,6 +66,37 @@ to leave that rule off, matching the addon.
 Rule overrides go through the `config` file (an `oversight.config.json`), the same
 one the CLI reads directly.
 
+## A Storybook in a package directory
+
+Point `working-directory` at the package and the annotations name paths from the
+checkout root, so a Storybook under `storybook/` produces
+`storybook/src/Avatar/Avatar.tsx`. Older versions named the path relative to the
+package, and GitHub drops an annotation naming a file the repository does not have
+without reporting anything. Resolving from the checkout root landed in
+`oversight-lint` 0.6.0, which the default `version: latest` gives you.
+
+Setting `working-directory` on this action alone will not get the job running. The
+dependency install and the Storybook build need it too, and `actions/setup-node`
+looks for the lockfile at the repository root, so a package carrying its own lockfile
+needs `cache-dependency-path`:
+
+```yaml
+- uses: actions/checkout@v4
+- uses: pnpm/action-setup@v4
+- uses: actions/setup-node@v4
+  with:
+    node-version: 20
+    cache: pnpm
+    cache-dependency-path: storybook/pnpm-lock.yaml
+- run: pnpm install
+  working-directory: storybook
+- run: pnpm build-storybook
+  working-directory: storybook
+- uses: rachelslurs/oversight-lint-action@v1
+  with:
+    working-directory: storybook
+```
+
 ## Exit behavior and annotations
 
 The action fails (exit 1) when an error-severity rule fires, or when warnings exceed
@@ -73,10 +104,19 @@ The action fails (exit 1) when an error-severity rule fires, or when warnings ex
 unparseable, or unsupported manifest.
 
 Findings are emitted as `::error`/`::warning`/`::notice` annotations, which GitHub
-shows on the workflow run and the pull request's **Checks** tab. They carry no line
-numbers, so each anchors to the top of the component's stories file, not the
-offending line — so they surface on the Checks tab, not beside your changed code in
-the diff. GitHub caps them at ~10 per type per step.
+shows on the workflow run and the pull request's **Checks** tab. GitHub caps them at
+~10 per type per step. The action also writes a findings table to the run's job
+summary.
+
+Each annotation names the component's own source file, so a missing description on a
+component defined in `src/Avatar/Avatar.tsx` names that path. Two kinds of finding
+name the stories file instead: `story-extraction-error`, which reports a failure on
+one story, and any entry whose extraction produced no payload, which leaves no source
+to name. `extractor-drift` is a manifest-level finding and carries no file.
+
+Annotations printed by an action do not render beside your changed code on the
+**Files changed** tab, whatever they carry. The behavior is upstream and tracked in
+[issue #3](https://github.com/rachelslurs/oversight-lint-action/issues/3).
 
 ## See also
 
