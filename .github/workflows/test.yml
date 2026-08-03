@@ -143,3 +143,70 @@ jobs:
             exit 1
           fi
           echo "OK: the action failed as expected on a missing manifest."
+
+  # The CLI has read the ref-based v:1 manifest since 0.5.0 and every other
+  # fixture here is v:0, so a green run said nothing about ref resolution.
+  #
+  # Asserting "produces findings" would not be enough: a ref that fails to
+  # resolve reports docgen-missing per component, which is indistinguishable
+  # from real findings. The invariant is that both formats anchor to the same
+  # files, which is what packages/cli/src/run.test.ts asserts upstream.
+  v1-equivalence:
+    name: v1 refs resolve to the same findings as v0
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: lint
+        continue-on-error: true
+        uses: ./
+        with:
+          manifest: test/v1/manifests/components.json
+          version: ${{ env.OVERSIGHT_LINT_VERSION }}
+
+      - name: Assert the action failed on the v1 manifest
+        run: |
+          if [[ "${{ steps.lint.outcome }}" != "failure" ]]; then
+            echo "Expected the action to fail on v1 findings, got '${{ steps.lint.outcome }}'."
+            exit 1
+          fi
+          echo "OK: the action failed as expected on the v1 manifest."
+
+      - name: Assert v1 and v0 anchor to the same files
+        env:
+          VERSION: ${{ env.OVERSIGHT_LINT_VERSION }}
+        run: |
+          set -euo pipefail
+          annotations() {
+            set +e
+            npx --yes "oversight-lint@$VERSION" "$1" --format github 2>/dev/null
+            set -e
+          }
+          annotations test/v1/manifests/components.json > v1.out
+          annotations test/v0/components.json > v0.out
+
+          grep -o 'file=[^:,]*' v1.out | sort -u > v1.files
+          grep -o 'file=[^:,]*' v0.out | sort -u > v0.files
+
+          if [[ ! -s v1.files ]]; then
+            echo "No annotations from the v1 manifest at all."
+            cat v1.out
+            exit 1
+          fi
+          if ! diff -u v0.files v1.files; then
+            echo "v1 and v0 anchor to different files, so a ref resolved wrongly."
+            exit 1
+          fi
+          echo "OK: both formats anchor to $(wc -l < v1.files) of the same files."
+
+          # A dangling ref surfaces here, and the flat-layout mistake (an index
+          # not inside a directory named `manifests`) surfaces as six of them.
+          if grep -F 'title=oversight/docgen-missing' v1.out; then
+            echo "docgen-missing on the v1 manifest means refs did not resolve."
+            exit 1
+          fi
+
+          # This rule can only fire from props read out of a resolved payload.
+          grep -F 'title=oversight/required-prop-undocumented' v1.out
+          echo "OK: props were read through the refs."

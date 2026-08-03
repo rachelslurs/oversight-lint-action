@@ -66,6 +66,18 @@ to leave that rule off, matching the addon.
 Rule overrides go through the `config` file (an `oversight.config.json`), the same
 one the CLI reads directly.
 
+## Pointing `manifest` at a ref-based manifest
+
+`experimentalDocgenServer` emits a `v: 1` manifest, where the index holds `$ref`
+pointers instead of inline docgen. `oversight-lint` has read that format since
+0.5.0, and the `manifest` input takes it.
+
+The index alone is not enough. Its sibling `services/` directory has to travel with
+it, and the index has to stay in a directory named `manifests`, because a `$ref`
+climbs exactly one level from there. Point at a copy of the index on its own and
+every ref fails, which surfaces as `docgen-missing` for every component rather than
+as a path error.
+
 ## A Storybook in a package directory
 
 Point `working-directory` at the package and the annotations name paths from the
@@ -100,8 +112,10 @@ needs `cache-dependency-path`:
 ## Exit behavior and annotations
 
 The action fails (exit 1) when an error-severity rule fires, or when warnings exceed
-`max-warnings`. It exits 2 (also a failure) when it could not run: a missing,
-unparseable, or unsupported manifest.
+`max-warnings`. It exits 2 (also a failure) when it could not run: a manifest that is
+missing, unparseable, of a version this build does not know, or valid JSON that is not
+a manifest at all. The last of those exited 0 reporting no findings before
+`oversight-lint@0.6.0`, so a wrong-but-readable path used to pass green.
 
 Findings are emitted as `::error`/`::warning`/`::notice` annotations, which GitHub
 shows on the workflow run and the pull request's **Checks** tab. GitHub caps them at
