@@ -362,7 +362,11 @@ jobs:
           kind=patch
           if [[ "${NEW_VERSION%.*}" != "${current%.*}" ]]; then kind=minor; fi
 
-          if ! gh pr view "$BRANCH" --json number >/dev/null 2>&1; then
+          # `gh pr view <branch>` matches a pull request in any state, so once
+          # this branch has been merged once it always looks like one is open
+          # and no new one is ever created. Ask for open ones on this head only.
+          open_pr=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [[ -z "$open_pr" ]]; then
             gh pr create --base main --head "$BRANCH" \
               --title "ci: pin oversight-lint $NEW_VERSION" \
               --body "Gated by this run against \`$NEW_VERSION\`. Previous pin was \`$current\`, so this is a $kind bump."
