@@ -370,9 +370,20 @@ jobs:
             gh pr create --base main --head "$BRANCH" \
               --title "ci: pin oversight-lint $NEW_VERSION" \
               --body "Gated by this run against \`$NEW_VERSION\`. Previous pin was \`$current\`, so this is a $kind bump."
+            open_pr=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
           else
             echo "Updated the open pull request."
           fi
+
+          # Getting this far means a bump was proposed and the branch was
+          # pushed. Ending with nothing open means the pin silently stays put,
+          # which is how 0.6.2 was missed: the job logged a proposal and went
+          # green. Checked before auto-merge so a fast merge cannot race it.
+          if [[ -z "$open_pr" ]]; then
+            echo "Proposed $current -> $NEW_VERSION and pushed $BRANCH, but no pull request is open."
+            exit 1
+          fi
+          echo "Pull request #$open_pr proposes $NEW_VERSION ($kind)."
 
           if [[ "$kind" == patch ]]; then
             gh pr merge "$BRANCH" --auto --squash \
