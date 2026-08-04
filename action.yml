@@ -55,4 +55,23 @@ runs:
         if [[ -n "$INPUT_MAX_WARNINGS" ]]; then args+=(--max-warnings "$INPUT_MAX_WARNINGS"); fi
         if [[ -n "$INPUT_CONFIG" ]]; then args+=(--config "$INPUT_CONFIG"); fi
         if [[ -n "$INPUT_EXPECTED_EXTRACTOR" ]]; then args+=(--expected-extractor "$INPUT_EXPECTED_EXTRACTOR"); fi
+
+        # An npm dist-tag can point at an older release than `latest` and
+        # nothing says so: `beta` sat on a prerelease for weeks after the stable
+        # shipped. An exact version stays quiet, because pinning is deliberate.
+        #
+        # Every lookup tolerates failure. This runs under `set -euo pipefail` in
+        # front of the only thing the action exists to do, so a registry hiccup
+        # must not take the run down over an advisory.
+        if [[ ! "$INPUT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+          resolved=$(npm view "oversight-lint@$INPUT_VERSION" version 2>/dev/null | tail -1 || true)
+          newest=$(npm view "oversight-lint" version 2>/dev/null | tail -1 || true)
+          if [[ -n "$resolved" && -n "$newest" && "$resolved" != "$newest" ]]; then
+            older=$(printf '%s\n%s\n' "$resolved" "$newest" | sort -V | head -1)
+            if [[ "$older" == "$resolved" ]]; then
+              echo "::warning title=oversight/stale-dist-tag::The ${INPUT_VERSION} tag resolves to oversight-lint ${resolved}, which is older than latest (${newest}). Pin an exact version, or move the tag."
+            fi
+          fi
+        fi
+
         npx --yes "oversight-lint@$INPUT_VERSION" "${args[@]}"
