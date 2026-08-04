@@ -268,7 +268,7 @@ jobs:
       - uses: actions/create-github-app-token@v3
         id: app-token
         with:
-          app-id: ${{ secrets.BUMP_APP_ID }}
+          client-id: ${{ secrets.BUMP_APP_CLIENT_ID }}
           private-key: ${{ secrets.BUMP_APP_PRIVATE_KEY }}
 
       - uses: actions/checkout@v4
