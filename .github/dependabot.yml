@@ -1,0 +1,14 @@
+# This repo has no package.json, so github-actions is the only ecosystem that
+# applies. It is also where a break would come from: create-github-app-token
+# mints the app token that propose-bump pushes with, and GitHub is changing the
+# installation token format, so a major there is worth hearing about.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns:
+          - '*'
