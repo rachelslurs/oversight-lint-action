@@ -1,7 +1,11 @@
 name: Test
 
 on:
+  # main only. A branch push and its pull request both fired, so every internal
+  # branch ran the whole gate twice. Release keys off Test completing on main,
+  # so this trigger has to stay for that.
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
     inputs:
